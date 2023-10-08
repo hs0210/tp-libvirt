@@ -21,6 +21,7 @@ from virttest import virsh
 from virttest import test_setup
 from virttest.libvirt_xml import vm_xml
 from virttest.utils_test import libvirt
+from virttest.utils_libvirt import libvirt_numa
 
 from provider.numa import numa_base
 
@@ -178,10 +179,12 @@ def verify_cgroup(test_obj):
     nodeset = numa_base.convert_to_string_with_dash(test_obj.params.get('nodeset'))
     vm_pid = test_obj.vm.get_pid()
     cg = libvirt_cgroup.CgroupTest(vm_pid)
+    is_cgroup2 = cg.is_cgroup_v2_enabled()
     surfix = 'emulator/cpuset.mems' if cg.is_cgroup_v2_enabled() else 'cpuset.mems'
     cpuset_mems_cgroup_path = os.path.join(cg.get_cgroup_path(controller='cpuset'), surfix)
     cmd = 'cat %s' % re.escape(cpuset_mems_cgroup_path)
     cpuset_mems = process.run(cmd, shell=True).stdout_text.strip()
+    online_nodes = libvirt_numa.parse_numa_nodeset_to_str('x-y', test_obj.online_nodes)
     if mem_mode in ['strict', 'restrictive']:
         if cpuset_mems != nodeset:
             test_obj.test.fail("Expect cpuset.mems in "
@@ -191,9 +194,11 @@ def verify_cgroup(test_obj):
                                                cpuset_mems))
     else:
         if cpuset_mems:
+            expected_nodeset = '' if is_cgroup2 else online_nodes
             test_obj.test.fail("Expect cpuset.mems in "
-                               "path '%s' to be '', but "
+                               "path '%s' to be '%s', but "
                                "found '%s'" % (cpuset_mems_cgroup_path,
+                                               expected_nodeset,
                                                cpuset_mems))
     test_obj.test.log.debug("Step: verify cgroup information PASS")
 
