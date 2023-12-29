@@ -1,5 +1,6 @@
 import os
 import re
+import time
 
 from avocado.utils import process
 
@@ -689,7 +690,7 @@ def run(test, params, env):
 
         # Start vm and wait for vm to bootup
         vm.start()
-        vm.wait_for_login().close()
+        session = vm.wait_for_login()
         test.log.debug('Vmxml after started:\n%s',
                        virsh.dumpxml(vm_name).stdout_text)
 
@@ -722,9 +723,18 @@ def run(test, params, env):
                 libvirt.check_result(ausearch_result,
                                      expected_match=ausearch_check)
 
+        # Get the total memory of guest before hotplug
+        total_memory_before = utils_memory.memtotal(session=session)
+        test.log.debug("The total memory of guest before hotplug is %s", total_memory_before)
         # Hotplug dimm device to guest
         virsh.attach_device(vm_name, dimm_devices[1].xml, **VIRSH_ARGS)
         check_dominfo_and_ausearch(dominfo_check_1, ausearch_check_1)
+        # Get the total memory of guest before hotplug
+        total_memory_after = utils_memory.memtotal(session=session)
+        test.log.debug("The total memory of guest after hotplug is %s", total_memory_after)
+        time.sleep(3)
+        total_memory_after = utils_memory.memtotal(session=session)
+        test.log.debug("The total memory of guest after hotplug is %s", total_memory_after)
 
         # Hotplug dimm device with size 0 G, should fail with error message
         at_result = virsh.attach_device(vm_name, dimm_devices[0].xml,
@@ -735,6 +745,7 @@ def run(test, params, env):
         # HotUnplug the dimm device
         virsh.detach_device(vm_name, dimm_devices[1].xml, **VIRSH_ARGS)
         check_dominfo_and_ausearch(dominfo_check_3, ausearch_check_3)
+        session.close()
 
     def setup_test_managedsave(case):
         """
